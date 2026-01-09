@@ -15,22 +15,89 @@ interface Dispenser {
   nvs_settings?: Record<string, number | boolean>;
 }
 
-export default function DispenserDetailPage() {
+interface User {
+  user_id: string;
+  role: 'super_admin' | 'venue_owner';
+}
+
+interface VenueDispenser {
+  venue_id: string;
+  dispenser_id: string;
+  beer_id: string;
+  dispenser_number: number;
+}
+
+export default function AdminDispenserSettingsPage() {
   const params = useParams();
   const router = useRouter();
   const dispenserId = params.id as string;
 
+  const [user, setUser] = useState<User | null>(null);
   const [dispenser, setDispenser] = useState<Dispenser | null>(null);
+  const [venueInfo, setVenueInfo] = useState<{ venue_id: string; venue_name: string } | null>(null);
   const [settings, setSettings] = useState<Record<string, number | boolean>>(getDefaultNvsSettings());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['timing_normal', 'servo_angles']));
 
   useEffect(() => {
-    fetchDispenser();
+    checkAccessAndFetch();
   }, [dispenserId]);
+
+  async function checkAccessAndFetch() {
+    try {
+      // 1. 현재 사용자 확인
+      const meRes = await fetch('/api/auth/me');
+      if (!meRes.ok) {
+        router.push('/admin/login');
+        return;
+      }
+      const meData = await meRes.json();
+      setUser(meData.user);
+
+      // 2. 디스펜서-매장 매핑 조회
+      const vdRes = await fetch(`/api/admin/venue-dispensers?dispenser_id=${dispenserId}`);
+      if (vdRes.ok) {
+        const vdData = await vdRes.json();
+        const venueDispensers = vdData.venue_dispensers || [];
+
+        if (venueDispensers.length === 0) {
+          // 매핑 없음 - super_admin만 접근 가능
+          if (meData.user.role !== 'super_admin') {
+            setAccessDenied(true);
+            setLoading(false);
+            return;
+          }
+        } else {
+          // 매핑 있음 - venue owner 확인
+          const venueId = venueDispensers[0].venue_id;
+          const venueRes = await fetch(`/api/admin/venues/${venueId}`);
+
+          if (venueRes.ok) {
+            const venueData = await venueRes.json();
+            const venue = venueData.venue;
+
+            setVenueInfo({ venue_id: venue.venue_id, venue_name: venue.name });
+
+            if (meData.user.role === 'venue_owner' && venue.owner_id !== meData.user.user_id) {
+              setAccessDenied(true);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+      }
+
+      // 3. 권한 확인 후 디스펜서 정보 로드
+      await fetchDispenser();
+    } catch (err) {
+      setError('권한 확인 중 오류가 발생했습니다');
+      setLoading(false);
+    }
+  }
 
   async function fetchDispenser() {
     try {
@@ -102,7 +169,7 @@ export default function DispenserDetailPage() {
             type="checkbox"
             checked={value as boolean}
             onChange={(e) => handleFieldChange(field.key, e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
           />
           <span className="text-sm text-gray-700">{field.label}</span>
         </label>
@@ -116,7 +183,7 @@ export default function DispenserDetailPage() {
           <select
             value={value as number}
             onChange={(e) => handleFieldChange(field.key, Number(e.target.value))}
-            className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+            className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-amber-500 focus:border-amber-500"
           >
             {field.options.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -136,7 +203,7 @@ export default function DispenserDetailPage() {
           min={field.min}
           max={field.max}
           step={field.step}
-          className="w-24 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 text-right"
+          className="w-24 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-amber-500 focus:border-amber-500 text-right"
         />
         {field.unit && <span className="text-sm text-gray-500 w-12">{field.unit}</span>}
       </div>
@@ -184,39 +251,54 @@ export default function DispenserDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="text-center py-12 text-gray-500">로딩 중...</div>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500"></div>
+      </div>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-red-500 text-lg mb-4">접근 권한이 없습니다</div>
+        <p className="text-gray-500 mb-6">이 디스펜서에 대한 설정 권한이 없습니다.</p>
+        <Link
+          href="/admin/venue-dispensers"
+          className="inline-block px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600"
+        >
+          디스펜서 목록으로
+        </Link>
       </div>
     );
   }
 
   if (error && !dispenser) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="text-center py-12">
-          <p className="text-red-500 mb-4">{error}</p>
-          <Link href="/" className="text-blue-500 hover:underline">
-            목록으로 돌아가기
-          </Link>
-        </div>
+      <div className="text-center py-12">
+        <p className="text-red-500 mb-4">{error}</p>
+        <Link href="/admin/venue-dispensers" className="text-amber-500 hover:underline">
+          디스펜서 목록으로
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div>
       {/* Header */}
       <div className="mb-6">
-        <Link href="/" className="text-blue-500 hover:underline text-sm mb-2 inline-block">
-          &larr; 목록으로
+        <Link href="/admin/venue-dispensers" className="text-amber-500 hover:underline text-sm mb-2 inline-block">
+          &larr; 디스펜서 목록으로
         </Link>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">
-              {dispenser?.name || dispenserId}
+              {dispenser?.name || `디스펜서 ${dispenserId.slice(0, 8)}...`}
             </h1>
             <p className="text-gray-500">
-              {dispenser?.location || '위치 미설정'} · {dispenserId}
+              {venueInfo ? venueInfo.venue_name : dispenser?.location || '위치 미설정'}
+              <span className="mx-2">·</span>
+              <span className="font-mono text-sm">{dispenserId}</span>
             </p>
           </div>
           <div className="text-right">
@@ -263,7 +345,7 @@ export default function DispenserDetailPage() {
         <button
           onClick={saveSettings}
           disabled={saving}
-          className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300 transition"
+          className="px-6 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:bg-amber-300 transition"
         >
           {saving ? '저장 중...' : '설정 저장'}
         </button>
@@ -279,7 +361,7 @@ export default function DispenserDetailPage() {
         <button
           onClick={saveSettings}
           disabled={saving}
-          className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300 transition"
+          className="px-6 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:bg-amber-300 transition"
         >
           {saving ? '저장 중...' : '설정 저장'}
         </button>

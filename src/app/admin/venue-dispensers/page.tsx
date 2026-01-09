@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 interface Beer {
   beer_id: string;
@@ -262,6 +263,12 @@ export default function AdminVenueDispensersPage() {
               </div>
 
               <div className="flex gap-2 pt-3 border-t border-gray-100">
+                <Link
+                  href={`/admin/dispensers/${dispenser.dispenser_id}`}
+                  className="flex-1 text-blue-600 hover:bg-blue-50 py-2 rounded-lg text-sm font-medium text-center"
+                >
+                  설정
+                </Link>
                 <button
                   onClick={() => openEditModal(dispenser)}
                   className="flex-1 text-amber-600 hover:bg-amber-50 py-2 rounded-lg text-sm font-medium"
