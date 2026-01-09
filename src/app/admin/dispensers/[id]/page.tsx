@@ -58,40 +58,32 @@ export default function AdminDispenserSettingsPage() {
       const meData = await meRes.json();
       setUser(meData.user);
 
-      // 2. 디스펜서-매장 매핑 조회
+      // 2. NVS 설정은 super_admin만 접근 가능
+      if (meData.user.role !== 'super_admin') {
+        setAccessDenied(true);
+        setLoading(false);
+        return;
+      }
+
+      // 3. 디스펜서-매장 매핑 조회 (매장 정보 표시용)
       const vdRes = await fetch(`/api/admin/venue-dispensers?dispenser_id=${dispenserId}`);
       if (vdRes.ok) {
         const vdData = await vdRes.json();
         const venueDispensers = vdData.venue_dispensers || [];
 
-        if (venueDispensers.length === 0) {
-          // 매핑 없음 - super_admin만 접근 가능
-          if (meData.user.role !== 'super_admin') {
-            setAccessDenied(true);
-            setLoading(false);
-            return;
-          }
-        } else {
-          // 매핑 있음 - venue owner 확인
+        if (venueDispensers.length > 0) {
           const venueId = venueDispensers[0].venue_id;
           const venueRes = await fetch(`/api/admin/venues/${venueId}`);
 
           if (venueRes.ok) {
             const venueData = await venueRes.json();
             const venue = venueData.venue;
-
             setVenueInfo({ venue_id: venue.venue_id, venue_name: venue.name });
-
-            if (meData.user.role === 'venue_owner' && venue.owner_id !== meData.user.user_id) {
-              setAccessDenied(true);
-              setLoading(false);
-              return;
-            }
           }
         }
       }
 
-      // 3. 권한 확인 후 디스펜서 정보 로드
+      // 4. 권한 확인 후 디스펜서 정보 로드
       await fetchDispenser();
     } catch (err) {
       setError('권한 확인 중 오류가 발생했습니다');
@@ -261,7 +253,7 @@ export default function AdminDispenserSettingsPage() {
     return (
       <div className="text-center py-12">
         <div className="text-red-500 text-lg mb-4">접근 권한이 없습니다</div>
-        <p className="text-gray-500 mb-6">이 디스펜서에 대한 설정 권한이 없습니다.</p>
+        <p className="text-gray-500 mb-6">NVS 설정은 슈퍼관리자만 변경할 수 있습니다.</p>
         <Link
           href="/admin/venue-dispensers"
           className="inline-block px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600"

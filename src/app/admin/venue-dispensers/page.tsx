@@ -26,7 +26,13 @@ interface Venue {
   name: string;
 }
 
+interface User {
+  user_id: string;
+  role: 'super_admin' | 'venue_owner';
+}
+
 export default function AdminVenueDispensersPage() {
+  const [user, setUser] = useState<User | null>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [beers, setBeers] = useState<Beer[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<string>('');
@@ -58,10 +64,16 @@ export default function AdminVenueDispensersPage() {
 
   const fetchInitialData = async () => {
     try {
-      const [venuesRes, beersRes] = await Promise.all([
+      const [meRes, venuesRes, beersRes] = await Promise.all([
+        fetch('/api/auth/me'),
         fetch('/api/admin/venues'),
         fetch('/api/admin/beers'),
       ]);
+
+      if (meRes.ok) {
+        const data = await meRes.json();
+        setUser(data.user);
+      }
 
       if (venuesRes.ok) {
         const data = await venuesRes.json();
@@ -263,12 +275,14 @@ export default function AdminVenueDispensersPage() {
               </div>
 
               <div className="flex gap-2 pt-3 border-t border-gray-100">
-                <Link
-                  href={`/admin/dispensers/${dispenser.dispenser_id}`}
-                  className="flex-1 text-blue-600 hover:bg-blue-50 py-2 rounded-lg text-sm font-medium text-center"
-                >
-                  설정
-                </Link>
+                {user?.role === 'super_admin' && (
+                  <Link
+                    href={`/admin/dispensers/${dispenser.dispenser_id}`}
+                    className="flex-1 text-blue-600 hover:bg-blue-50 py-2 rounded-lg text-sm font-medium text-center"
+                  >
+                    설정
+                  </Link>
+                )}
                 <button
                   onClick={() => openEditModal(dispenser)}
                   className="flex-1 text-amber-600 hover:bg-amber-50 py-2 rounded-lg text-sm font-medium"
