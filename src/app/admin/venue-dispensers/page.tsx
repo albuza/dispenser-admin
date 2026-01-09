@@ -31,10 +31,17 @@ interface User {
   role: 'super_admin' | 'venue_owner';
 }
 
+interface Dispenser {
+  dispenser_id: string;
+  name?: string;
+}
+
 export default function AdminVenueDispensersPage() {
   const [user, setUser] = useState<User | null>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [beers, setBeers] = useState<Beer[]>([]);
+  const [allDispensers, setAllDispensers] = useState<Dispenser[]>([]);
+  const [assignedDispenserIds, setAssignedDispenserIds] = useState<Set<string>>(new Set());
   const [selectedVenue, setSelectedVenue] = useState<string>('');
   const [dispensers, setDispensers] = useState<VenueDispenser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,10 +71,12 @@ export default function AdminVenueDispensersPage() {
 
   const fetchInitialData = async () => {
     try {
-      const [meRes, venuesRes, beersRes] = await Promise.all([
+      const [meRes, venuesRes, beersRes, dispensersRes, allVdRes] = await Promise.all([
         fetch('/api/auth/me'),
         fetch('/api/admin/venues'),
         fetch('/api/admin/beers'),
+        fetch('/api/dispensers'),
+        fetch('/api/admin/venue-dispensers'),
       ]);
 
       if (meRes.ok) {
@@ -86,6 +95,19 @@ export default function AdminVenueDispensersPage() {
       if (beersRes.ok) {
         const data = await beersRes.json();
         setBeers(data.beers || []);
+      }
+
+      if (dispensersRes.ok) {
+        const data = await dispensersRes.json();
+        setAllDispensers(data.dispensers || []);
+      }
+
+      if (allVdRes.ok) {
+        const data = await allVdRes.json();
+        const assignedIds = new Set<string>(
+          (data.venue_dispensers || []).map((vd: VenueDispenser) => vd.dispenser_id)
+        );
+        setAssignedDispenserIds(assignedIds);
       }
     } catch (error) {
       console.error('Failed to fetch initial data:', error);
@@ -167,6 +189,10 @@ export default function AdminVenueDispensersPage() {
 
       setShowModal(false);
       fetchDispensers();
+      // 추가된 디스펜서를 assignedDispenserIds에 추가
+      if (!editingDispenser) {
+        setAssignedDispenserIds(prev => new Set([...prev, formData.dispenser_id]));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
@@ -189,6 +215,12 @@ export default function AdminVenueDispensersPage() {
       }
 
       fetchDispensers();
+      // 삭제된 디스펜서를 assignedDispenserIds에서 제거
+      setAssignedDispenserIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(dispenser.dispenser_id);
+        return newSet;
+      });
     } catch (err) {
       alert(err instanceof Error ? err.message : '삭제 중 오류가 발생했습니다.');
     }
@@ -197,6 +229,11 @@ export default function AdminVenueDispensersPage() {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ko-KR').format(amount) + '원';
   };
+
+  // 미연결 디스펜서 목록 계산
+  const unassignedDispensers = allDispensers.filter(
+    d => !assignedDispenserIds.has(d.dispenser_id)
+  );
 
   if (loading) {
     return (
@@ -210,13 +247,15 @@ export default function AdminVenueDispensersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">디스펜서 관리</h1>
-        <button
-          onClick={openCreateModal}
-          disabled={!selectedVenue}
-          className="bg-amber-500 hover:bg-amber-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium"
-        >
-          + 디스펜서 추가
-        </button>
+        {user?.role === 'super_admin' && (
+          <button
+            onClick={openCreateModal}
+            disabled={!selectedVenue}
+            className="bg-amber-500 hover:bg-amber-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium"
+          >
+            + 디스펜서 추가
+          </button>
+        )}
       </div>
 
       {/* Venue Selector */}
@@ -289,12 +328,14 @@ export default function AdminVenueDispensersPage() {
                 >
                   수정
                 </button>
-                <button
-                  onClick={() => handleDelete(dispenser)}
-                  className="flex-1 text-red-600 hover:bg-red-50 py-2 rounded-lg text-sm font-medium"
-                >
-                  삭제
-                </button>
+                {user?.role === 'super_admin' && (
+                  <button
+                    onClick={() => handleDelete(dispenser)}
+                    className="flex-1 text-red-600 hover:bg-red-50 py-2 rounded-lg text-sm font-medium"
+                  >
+                    삭제
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -313,16 +354,34 @@ export default function AdminVenueDispensersPage() {
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">디스펜서 ID *</label>
-                <input
-                  type="text"
-                  value={formData.dispenser_id}
-                  onChange={e => setFormData({ ...formData, dispenser_id: e.target.value })}
-                  required
-                  disabled={!!editingDispenser}
-                  placeholder="MAC 주소 또는 고유 ID"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none disabled:bg-gray-100"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">디스펜서 *</label>
+                {editingDispenser ? (
+                  <input
+                    type="text"
+                    value={formData.dispenser_id}
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600"
+                  />
+                ) : (
+                  <select
+                    value={formData.dispenser_id}
+                    onChange={e => setFormData({ ...formData, dispenser_id: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  >
+                    <option value="">디스펜서 선택...</option>
+                    {unassignedDispensers.map(d => (
+                      <option key={d.dispenser_id} value={d.dispenser_id}>
+                        {d.name || d.dispenser_id}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {!editingDispenser && unassignedDispensers.length === 0 && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    연결 가능한 디스펜서가 없습니다. 디스펜서를 먼저 등록해주세요.
+                  </p>
+                )}
               </div>
 
               <div>
