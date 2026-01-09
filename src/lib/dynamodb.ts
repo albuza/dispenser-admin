@@ -1,7 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 
 export const dynamodb = new DynamoDBClient({
-  region: process.env.AWS_REGION || 'ap-northeast-2',
+  region: process.env.APP_REGION || 'ap-northeast-2',
 });
 
 export const TABLES = {

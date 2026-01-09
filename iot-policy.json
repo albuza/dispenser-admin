@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iot:Connect",
+        "iot:Publish",
+        "iot:Subscribe",
+        "iot:Receive"
+      ],
+      "Resource": [
+        "arn:aws:iot:ap-northeast-2:183295441748:client/*",
+        "arn:aws:iot:ap-northeast-2:183295441748:topic/dispenser/*",
+        "arn:aws:iot:ap-northeast-2:183295441748:topicfilter/dispenser/*"
+      ]
+    }
+  ]
+}
