@@ -1,9 +1,0 @@
-{
-  "dispenser_id": {"S": "DSP-TEST-001"},
-  "device_secret": {"S": "test_secret_key_12345"},
-  "name": {"S": "Test Dispenser"},
-  "location": {"S": "Seoul"},
-  "nvs_version": {"N": "0"},
-  "nvs_settings": {"M": {}},
-  "created_at": {"N": "1736408220000"}
-}
