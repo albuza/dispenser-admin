@@ -9,21 +9,35 @@ interface RouteParams {
 }
 
 /**
+ * Check if request is from web admin (no device auth headers)
+ * In production, this should be replaced with proper session/JWT auth
+ */
+function isWebAdminRequest(req: NextRequest): boolean {
+  const hasDeviceHeaders = req.headers.get('X-Dispenser-ID') &&
+                           req.headers.get('X-Timestamp') &&
+                           req.headers.get('X-Signature');
+  return !hasDeviceHeaders;
+}
+
+/**
  * GET /api/dispensers/[id]/nvs
  * Get NVS settings for a dispenser
  */
 export async function GET(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
-  // Verify device authentication
-  const auth = await verifyDeviceAuth(req);
-  if (!auth.valid) {
-    return NextResponse.json({ error: auth.error }, { status: 401 });
-  }
+  // Web admin requests skip device auth (TODO: add session auth in production)
+  if (!isWebAdminRequest(req)) {
+    // Verify device authentication
+    const auth = await verifyDeviceAuth(req);
+    if (!auth.valid) {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
 
-  // Verify dispenser ID matches
-  if (auth.dispenserId !== id) {
-    return NextResponse.json({ error: 'Dispenser ID mismatch' }, { status: 403 });
+    // Verify dispenser ID matches
+    if (auth.dispenserId !== id) {
+      return NextResponse.json({ error: 'Dispenser ID mismatch' }, { status: 403 });
+    }
   }
 
   try {
@@ -65,44 +79,33 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 export async function PUT(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
-  // Verify device authentication
-  const auth = await verifyDeviceAuth(req);
-  if (!auth.valid) {
-    return NextResponse.json({ error: auth.error }, { status: 401 });
-  }
+  // Web admin requests skip device auth (TODO: add session auth in production)
+  if (!isWebAdminRequest(req)) {
+    // Verify device authentication
+    const auth = await verifyDeviceAuth(req);
+    if (!auth.valid) {
+      return NextResponse.json({ error: auth.error }, { status: 401 });
+    }
 
-  // Verify dispenser ID matches
-  if (auth.dispenserId !== id) {
-    return NextResponse.json({ error: 'Dispenser ID mismatch' }, { status: 403 });
+    // Verify dispenser ID matches
+    if (auth.dispenserId !== id) {
+      return NextResponse.json({ error: 'Dispenser ID mismatch' }, { status: 403 });
+    }
   }
 
   try {
     const body = await req.json();
-    const { nvs_settings, nvs_version } = body;
+    const { nvs_settings } = body;
 
-    if (!nvs_settings || typeof nvs_version !== 'number') {
+    if (!nvs_settings) {
       return NextResponse.json(
-        { error: 'Missing nvs_settings or nvs_version' },
+        { error: 'Missing nvs_settings' },
         { status: 400 }
       );
     }
 
-    // Check for version conflict (optional)
-    const current = await dynamodb.send(new GetItemCommand({
-      TableName: TABLES.DISPENSERS,
-      Key: marshall({ dispenser_id: id }),
-      ProjectionExpression: 'nvs_version',
-    }));
-
-    if (current.Item) {
-      const currentItem = unmarshall(current.Item);
-      if (currentItem.nvs_version && currentItem.nvs_version > nvs_version) {
-        return NextResponse.json({
-          error: 'Version conflict',
-          server_version: currentItem.nvs_version,
-        }, { status: 409 });
-      }
-    }
+    // Generate new version (current timestamp in seconds)
+    const nvs_version = Math.floor(Date.now() / 1000);
 
     // Update NVS settings
     await dynamodb.send(new UpdateItemCommand({

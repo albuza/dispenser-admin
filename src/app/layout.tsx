@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Dispenser Admin",
@@ -12,7 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body className="bg-gray-100 min-h-screen">{children}</body>
     </html>
   );
 }
