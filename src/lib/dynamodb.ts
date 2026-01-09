@@ -16,4 +16,10 @@ export const dynamodb = new DynamoDBClient({
 export const TABLES = {
   DISPENSERS: 'dispensers',
   DISPENSE_LOGS: 'dispense_logs',
+  VENUES: 'venues',
+  BEERS: 'beers',
+  VENUE_DISPENSERS: 'venue_dispensers',
+  USERS: 'users',
+  CUSTOMERS: 'customers',
+  ORDERS: 'orders',
 } as const;

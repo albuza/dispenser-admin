@@ -100,7 +100,8 @@ export async function POST(req: NextRequest) {
       Item: marshall({
         dispenser_id,
         device_secret,
-        name: name || `Dispenser ${dispenser_id.slice(-8)}`,
+        // Generate name from MAC: "A4:CF:12:34:56:78" -> "DPS_A4CF12345678"
+        name: name || `DPS_${dispenser_id.replace(/:/g, '')}`,
         location: location || '',
         nvs_version,
         nvs_settings: {},
