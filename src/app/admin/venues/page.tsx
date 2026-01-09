@@ -13,8 +13,16 @@ interface Venue {
   created_at: number;
 }
 
+interface User {
+  user_id: string;
+  name: string;
+  email: string;
+  role: 'super_admin' | 'venue_owner';
+}
+
 export default function AdminVenuesPage() {
   const [venues, setVenues] = useState<Venue[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingVenue, setEditingVenue] = useState<Venue | null>(null);
@@ -29,8 +37,32 @@ export default function AdminVenuesPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchVenues();
+    fetchInitialData();
   }, []);
+
+  const fetchInitialData = async () => {
+    try {
+      const [venuesRes, usersRes] = await Promise.all([
+        fetch('/api/admin/venues'),
+        fetch('/api/admin/users'),
+      ]);
+
+      if (venuesRes.ok) {
+        const data = await venuesRes.json();
+        setVenues(data.venues || []);
+      }
+
+      if (usersRes.ok) {
+        const data = await usersRes.json();
+        // venue_owner 역할만 필터링
+        setUsers((data.users || []).filter((u: User) => u.role === 'venue_owner'));
+      }
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchVenues = async () => {
     try {
@@ -133,6 +165,12 @@ export default function AdminVenuesPage() {
     return new Date(timestamp).toLocaleDateString('ko-KR');
   };
 
+  const getOwnerName = (ownerId: string) => {
+    if (!ownerId) return '-';
+    const owner = users.find(u => u.user_id === ownerId);
+    return owner ? owner.name : ownerId.slice(0, 8) + '...';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -166,6 +204,7 @@ export default function AdminVenuesPage() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">매장명</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">주소</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">운영자</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">사업자번호</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">등록일</th>
@@ -181,6 +220,9 @@ export default function AdminVenuesPage() {
                     </td>
                     <td className="px-6 py-4 text-gray-600 max-w-xs truncate">
                       {venue.address}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">
+                      {getOwnerName(venue.owner_id)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-600">
                       {venue.business_number || '-'}
@@ -259,14 +301,19 @@ export default function AdminVenuesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">운영자 ID</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">운영자</label>
+                <select
                   value={formData.owner_id}
                   onChange={e => setFormData({ ...formData, owner_id: e.target.value })}
-                  placeholder="운영자 user_id"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
-                />
+                >
+                  <option value="">운영자 미지정</option>
+                  {users.map(user => (
+                    <option key={user.user_id} value={user.user_id}>
+                      {user.name} ({user.email})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
